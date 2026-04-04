@@ -1,0 +1,8 @@
+"stalker_tdm"
+{
+	"base"		"base"
+	"title"		"S.T.A.L.K.E.R. Multiplayer TDM"
+	"maps"		"^aim_|^rp_"
+	"menusystem"	"1"
+	"workshopid"	""
+}
