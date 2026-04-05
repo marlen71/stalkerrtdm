@@ -3,6 +3,7 @@
 -- ============================================================================
 
 include("shared.lua")
+include("cl_fonts.lua")
 include("cl_hud.lua")
 include("cl_shop.lua")
 include("cl_scoreboard.lua")
@@ -10,25 +11,31 @@ include("cl_voting.lua")
 include("cl_settings.lua")
 include("cl_deathscreen.lua")
 
--- ВАЖНО: эти два файла подключаем последними
+-- Явно подключаем меню (GMod ищет файлы в папке gamemode автоматически)
 include("cl_modelmenu.lua")
 include("cl_teammenu.lua")
 
 -- ============================================================================
+-- ПРОВЕРКА СРАЗУ ПОСЛЕ ПОДКЛЮЧЕНИЯ
+-- ============================================================================
+print("[STALKER] После include cl_teammenu: " .. type(STALKER_OpenTeamMenu))
+print("[STALKER] После include cl_modelmenu: " .. type(STALKER_OpenModelMenu))
+
+-- ============================================================================
 -- КЛИЕНТСКИЕ ДАННЫЕ
 -- ============================================================================
-STALKER_CLIENT = {
+STALKER_CLIENT = STALKER_CLIENT or {
     RoundState     = ROUND_WAITING,
     RoundEndTime   = 0,
     CurrentMatchup = 1,
     TeamScores     = { [TEAM_FACTION1] = 0, [TEAM_FACTION2] = 0 },
 
-    KillFeed         = {},
-    KillFeedMaxItems = 6,
-    KillFeedDuration = 6,
+    KillFeed            = {},
+    KillFeedMaxItems    = 6,
+    KillFeedDuration    = 6,
 
-    MoneyNotifications = {},
-    MoneyNotifDuration = 3,
+    MoneyNotifications  = {},
+    MoneyNotifDuration  = 3,
 
     Visuals      = table.Copy(STALKER_CONFIG.DefaultVisuals),
     LevelUpNotif = nil,
@@ -36,7 +43,7 @@ STALKER_CLIENT = {
 }
 
 -- ============================================================================
--- КЛИЕНТСКИЕ НАСТРОЙКИ
+-- НАСТРОЙКИ
 -- ============================================================================
 function STALKER_LoadClientSettings()
     local raw = file.Read("stalker_tdm/client_settings.json", "DATA")
@@ -63,7 +70,6 @@ STALKER_LoadClientSettings()
 -- ============================================================================
 -- СЕТЕВЫЕ ПРИЁМНИКИ
 -- ============================================================================
-
 net.Receive("STALKER_SyncGameData", function()
     STALKER_CLIENT.RoundState                = net.ReadUInt(4)
     STALKER_CLIENT.RoundEndTime              = net.ReadFloat()
@@ -131,8 +137,7 @@ net.Receive("STALKER_BuyResult", function()
 end)
 
 net.Receive("STALKER_XPUpdate", function()
-    local totalXP = net.ReadInt(32)
-    local gained  = net.ReadInt(16)
+    -- резерв
 end)
 
 net.Receive("STALKER_PlaySoundToAll", function()
@@ -143,9 +148,10 @@ net.Receive("STALKER_PlaySoundToPlayer", function()
     surface.PlaySound(net.ReadString())
 end)
 
--- Открытие меню команды по сигналу сервера
+-- Сервер просит открыть меню команды
 net.Receive("STALKER_OpenTeamMenu", function()
-    timer.Simple(0.1, function()
+    timer.Simple(0.2, function()
+        if not IsValid(LocalPlayer()) then return end
         if type(STALKER_OpenTeamMenu) == "function" then
             STALKER_OpenTeamMenu()
         else
@@ -155,19 +161,22 @@ net.Receive("STALKER_OpenTeamMenu", function()
 end)
 
 -- ============================================================================
--- БИНДЫ — регистрируем через Think чтобы гарантировать работу
+-- БИНДЫ
 -- ============================================================================
-
--- Флаги нажатий (избегаем повторного срабатывания)
 local keyStates = {}
 
 hook.Add("Think", "STALKER_KeyBinds", function()
+    if not IsValid(LocalPlayer()) then return end
+
     -- M — Меню команды
     local mDown = input.IsKeyDown(KEY_M)
     if mDown and not keyStates[KEY_M] then
         keyStates[KEY_M] = true
         if type(STALKER_OpenTeamMenu) == "function" then
             STALKER_OpenTeamMenu()
+        else
+            print("[STALKER] STALKER_OpenTeamMenu не найдена! Тип: " 
+                .. type(STALKER_OpenTeamMenu))
         end
     elseif not mDown then
         keyStates[KEY_M] = false
@@ -197,16 +206,48 @@ hook.Add("Think", "STALKER_KeyBinds", function()
 end)
 
 -- ============================================================================
--- СКРЫТИЕ СТАНДАРТНЫХ ЭЛЕМЕНТОВ GMOD HUD
+-- СКРЫТИЕ СТАНДАРТНОГО HUD
 -- ============================================================================
-function GM:HUDShouldDraw(name)
+hook.Add("HUDShouldDraw", "STALKER_HideHUD", function(name)
     local hide = {
-        ["CHudHealth"]          = true,
-        ["CHudBattery"]         = true,
-        ["CHudAmmo"]            = true,
-        ["CHudSecondaryAmmo"]   = true,
-        ["CHudDamageIndicator"] = true,
+        ["CHudHealth"]                = true,
+        ["CHudBattery"]               = true,
+        ["CHudAmmo"]                  = true,
+        ["CHudSecondaryAmmo"]         = true,
+        ["CHudDamageIndicator"]       = true,
+        ["CHudCrosshair"]             = true,
+        ["CHudGeiger"]                = true,
+        ["CHudBench"]                 = true,
+        ["CHudPoisonDamageIndicator"] = true,
+        ["CHudSquadStatus"]           = true,
+        ["CHudNPCUsedWeapon"]         = true,
     }
     if hide[name] then return false end
-    return true
-end
+end)
+
+hook.Add("HUDDrawTargetID", "STALKER_HideTargetID", function()
+    return false
+end)
+
+-- ============================================================================
+-- БЛОКИРОВКА ZOOM
+-- ============================================================================
+hook.Add("PlayerBindPress", "STALKER_BlockZoom", function(ply, bind, pressed)
+    if bind == "+zoom" then return true end
+end)
+
+-- ============================================================================
+-- ПРОВЕРКА ЗАГРУЗКИ
+-- ============================================================================
+hook.Add("InitPostEntity", "STALKER_CheckFunctions", function()
+    timer.Simple(2, function()
+        print("[STALKER] === ПРОВЕРКА ФУНКЦИЙ ===")
+        print("[STALKER] STALKER_OpenTeamMenu: " 
+            .. type(STALKER_OpenTeamMenu))
+        print("[STALKER] STALKER_OpenShop: "     
+            .. type(STALKER_OpenShop))
+        print("[STALKER] STALKER_OpenModelMenu: " 
+            .. type(STALKER_OpenModelMenu))
+        print("[STALKER] ========================")
+    end)
+end)
