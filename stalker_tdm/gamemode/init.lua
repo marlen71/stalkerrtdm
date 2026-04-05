@@ -2,18 +2,20 @@
 -- S.T.A.L.K.E.R. TDM — Серверная инициализация (исправленный)
 -- ============================================================================
 
--- В начале init.lua убедитесь что есть:
-AddCSLuaFile("shared.lua")
+-- init.lua — серверная сторона
+-- Добавить ЭТО в init.lua чтобы файлы выполнялись на клиенте:
+AddCSLuaFile("cl_fonts.lua")
 AddCSLuaFile("config.lua")
-AddCSLuaFile("cl_init.lua")
+AddCSLuaFile("shared.lua")
 AddCSLuaFile("cl_hud.lua")
 AddCSLuaFile("cl_shop.lua")
 AddCSLuaFile("cl_scoreboard.lua")
 AddCSLuaFile("cl_voting.lua")
-AddCSLuaFile("cl_teammenu.lua")   -- ОБЯЗАТЕЛЬНО!
-AddCSLuaFile("cl_modelmenu.lua")  -- ОБЯЗАТЕЛЬНО!
 AddCSLuaFile("cl_settings.lua")
 AddCSLuaFile("cl_deathscreen.lua")
+AddCSLuaFile("cl_modelmenu.lua")
+AddCSLuaFile("cl_teammenu.lua")
+AddCSLuaFile("cl_init.lua")
 
 include("shared.lua")
 include("sv_economy.lua")
@@ -304,3 +306,42 @@ function GM:SendKillFeed(attacker, victim, inflictor, isHeadshot, isKnife)
         net.WriteBool(isKnife)
     net.Broadcast()
 end
+
+-- В GM:Initialize или отдельным хуком
+
+-- ============================================================================
+-- УРОН ОТ ПАДЕНИЯ (включаем)
+-- ============================================================================
+hook.Add("Initialize", "STALKER_EnableFallDamage", function()
+    -- Убираем блокировку урона от падения если она была
+    RunConsoleCommand("sv_falldamage", "1")
+end)
+
+-- Реальный урон от падения (формула как в CS/оригинальном GMod)
+hook.Add("GetFallDamage", "STALKER_FallDamage", function(ply, vel)
+    -- Урон начинается при скорости падения > 450 юнитов/с
+    if vel < 450 then return 0 end
+    -- Урон пропорционален скорости
+    local damage = (vel - 450) * 0.25
+    return math.Clamp(damage, 0, 100)
+end)
+
+-- ============================================================================
+-- ГОЛОСОВОЙ ЧАТ (общий для всех)
+-- ============================================================================
+hook.Add("PlayerCanHearPlayersVoice", "STALKER_GlobalVoice", function(listener, talker)
+    -- Все слышат всех (глобальный голосовой чат)
+    if IsValid(listener) and IsValid(talker) then
+        return true, false -- true = слышит, false = не 3D позиционирование
+    end
+end)
+
+-- ============================================================================
+-- ЗАПРЕТ СМЕНЫ НА НАБЛЮДАТЕЛЯ ДЛЯ ИГРОКОВ В КОМАНДЕ
+-- ============================================================================
+hook.Add("PlayerShouldTakeDamage", "STALKER_Init", function() end)
+
+-- Запрет перехода в наблюдатель если уже в команде
+hook.Add("PlayerNoClip", "STALKER_NoNoclip", function(ply)
+    return false -- Отключаем noclip полностью
+end)
